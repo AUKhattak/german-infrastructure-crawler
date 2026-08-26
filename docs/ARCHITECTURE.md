@@ -17,11 +17,11 @@ The German Infrastructure Crawler is a **modular, extensible, and configuration-
 
 ```
 CONFIGURATION
-  seed_sources, queries, categories, discovery limits
+  sources.yaml + settings.yaml + categories.yaml
                          │
                          ▼
 DISCOVERY
-  seed loader -> catalogue detector (configured CKAN or auto CKAN/HTML)
+  seed loader -> bounded candidate discovery -> catalogue detector
                          │
                          ▼
 CORE ENGINE
@@ -34,11 +34,11 @@ CRAWLERS
                          ▼
 PROCESSING
   Dataset transformation -> classification/geographic extraction
-  -> URL validation -> deduplication
+  -> URL validation/evidence -> deduplication
                          │
                          ▼
 OUTPUT
-  timestamped JSON and CSV written by scripts/run.py
+  timestamped JSON/CSV -> validate_output.py evidence report
 ```
 
 ---
@@ -56,17 +56,18 @@ OUTPUT
   - Legacy `sources` mapping for compatibility
 #### `config/categories.yaml`
 - **Purpose**: Keyword mappings used by the infrastructure classifier
+- **Authority**: Single source of truth used by CKAN and HTML sources
 
 #### `config/settings.yaml`
 - **Purpose**: Stores system-wide behavior settings
-- **Runtime status**: The current runner loads `sources.yaml`; this file is
-  retained as a separate settings reference and is not currently loaded by the
-  main crawl command.
+- **Runtime status**: Loaded by `scripts/run.py` and passed to the registry and
+  crawler components.
 - **Contents**:
   - HTTP settings (timeout, retries, rate limit)
   - Crawler limits (max datasets/source, max queries/source)
   - Logging configuration
   - Validation requirements
+  - Bounded discovery settings and category configuration path
 
 ### 2. **Core Engine Layer**
 
@@ -137,8 +138,15 @@ legacy `sources` mapping when needed.
 **File**: `src/discovery/catalogue_detector.py`
 
 Checks configured or common CKAN API paths and falls back to HTML detection.
-Unsupported seeds are logged and skipped. Discovery is intentionally bounded
-and does not perform unrestricted internet crawling.
+Unsupported candidates are logged and skipped. Discovery is intentionally
+bounded and does not perform unrestricted internet crawling.
+
+#### `CandidateDiscoverer`
+**File**: `src/discovery/candidate_discoverer.py`
+
+Follows relevant links from seed pages within configured depth, page, domain,
+and robots limits. Candidates are deduplicated by normalized origin and retain
+their discovery provenance.
 
 ### 4. **Crawler Implementations**
 
@@ -169,6 +177,7 @@ and does not perform unrestricted internet crawling.
 - Configurable selector-based extraction
 - Fallback for non-API portals
 - `robots.txt` check before search requests
+- Shared infrastructure classification and optional licence/resource selectors
 
 ---
 
@@ -215,8 +224,17 @@ fallback keywords if the configuration cannot be loaded.
 **File**: `src/utils/validators.py`
 
 Normalizes HTTP(S) URLs and validates them with a streamed GET request. The
-result records HTTP status and distinguishes invalid, inaccessible, and error
-states without stopping the crawl.
+result records a normalized URL, HTTP status, validation timestamp, and
+distinguishes invalid, inaccessible, and error states without stopping the
+crawl. Offline runs leave records as `unknown`/`not_checked`.
+
+#### Post-run Evidence Validation
+**File**: `scripts/validate_output.py`
+
+Checks generated JSON or CSV without making network requests. It verifies
+unique source counts, validation evidence, URL structure, category coverage,
+metadata quality, contradictions, and the 20-validated-source threshold. It
+can produce a validation report and validated-only CSV.
 
 #### Robots Checking
 **File**: `src/utils/robots.py`
@@ -251,12 +269,15 @@ class Dataset:
     
     # Optional fields
     url: str = ''
+    api_url: str = ''
     license: str = 'Unknown'
     geographic_coverage: str = 'Unknown'
     infrastructure_categories: List[str] = field(default_factory=list)
     access_status: str = 'unknown'
     source_url_status: str = 'not_checked'
+    source_url_validation: Dict = field(default_factory=dict)
     resource_validation: List[Dict] = field(default_factory=list)
+    validation_timestamp: str = ''
     matched_keywords: List[str] = field(default_factory=list)
     # ... more fields
 ```
@@ -277,13 +298,15 @@ class Dataset:
 ### Complete Crawling Pipeline
 
 ```
-1. Load `sources.yaml` configuration
+1. Load `sources.yaml` and `settings.yaml` configuration
   - The default path is resolved from the project root.
   - Active seed portals come from `seed_sources`; the legacy `sources` mapping
     remains supported.
   - Queries come from `--query`, `discovery.queries`, or `default_queries`.
   ↓
-2. Detect catalogue types for each seed
+2. Discover bounded candidates and detect catalogue types
+  - Follow relevant links within configured depth, page, domain, and robots
+    limits.
   - Configured CKAN/HTML types are used directly.
   - `auto` seeds are checked against common CKAN API paths, then HTML.
   - Unsupported seeds are skipped and logged.
@@ -300,13 +323,14 @@ class Dataset:
   - CKAN sources build API requests, use `HttpClient` for rate limiting and
     retries, transform responses into `Dataset` objects, and apply the
     classifier and geographic extractor.
-  - HTML sources fetch the configured search page, parse dataset links, and
-    create `Dataset` objects with HTML-specific default fields after a
+  - HTML sources fetch the configured search page, parse dataset links, apply
+    shared classification, and extract configured metadata after a
     `robots.txt` check.
   ↓
 6. Validate dataset and resource URLs
-  - Record source URL status, resource validation results, and overall access
-    status without aborting the crawl for individual failures.
+  - Record source/resource URL status, HTTP status, normalized URLs, timestamps,
+    and overall access status without aborting the crawl for individual
+    failures.
   ↓
 7. Collect all datasets from all working sources
   ↓
@@ -318,7 +342,10 @@ class Dataset:
 9. Write results when datasets were found
   - Create the selected output directory.
   - Write timestamped JSON and CSV files from the `Dataset` objects with
-    descriptive serialized field names.
+    descriptive serialized field names and structured resource evidence.
+  ↓
+10. Validate generated evidence with `scripts/validate_output.py`
+  - Optionally write `validation_report.json` and a validated-only CSV.
 ```
 
 ---
@@ -354,12 +381,13 @@ german-infrastructure-crawler/
 │   ├── discovery/
 │   │   ├── __init__.py
 │   │   ├── seed_loader.py         # Seed configuration loading
-│   │   └── catalogue_detector.py  # CKAN/HTML type detection
+│   │   ├── catalogue_detector.py  # CKAN/HTML type detection
+│   │   └── candidate_discoverer.py # Bounded candidate discovery
 │   ├── processors/
 │   │   ├── __init__.py
 │   │   ├── classifier.py         # Infrastructure classifier
 │   │   ├── deduplicator.py       # Duplicate detection and selection
-│   │   ├── formatter.py          # Reserved formatting module
+│   │   ├── formatter.py          # JSON/CSV formatting helpers
 │   │   └── geocoder.py            # Geographic extractor
 │   └── utils/
 │       ├── __init__.py
@@ -368,9 +396,9 @@ german-infrastructure-crawler/
 │       ├── robots.py              # robots.txt checks
 │       └── validators.py         # Reserved validation helpers
 ├── scripts/
-│   ├── discover_sources.py       # Reserved source discovery utility
+│   ├── discover_sources.py       # Source discovery utility
 │   ├── run.py                    # Main crawler entry point and output writing
-│   ├── validate_output.py        # Reserved output validation utility
+│   ├── validate_output.py        # Post-run evidence validator
 │   └── logs/                     # Runtime logs
 ├── output/                       # Generated JSON and CSV results
 ├── requirements/
@@ -495,8 +523,9 @@ class CKANSource(BaseCrawler):
 ## ⚙️ Configuration Reference
 
 ### Settings (`settings.yaml`)
-The file stores global settings for HTTP, crawling, validation, and logging.
-The current main runner does not load this file; it loads `sources.yaml`.
+The file stores global settings for HTTP, crawling, bounded discovery,
+validation, category configuration, output, and logging. The main runner loads
+this file by default and passes the settings to the crawler components.
 ```yaml
 http:
   timeout: 30                    # Request timeout (seconds)
@@ -538,10 +567,6 @@ default_queries:
   - energy
   - infrastructure
   - telecom
-
-categories:  # Keyword mappings
-  power: [strom, electricity, energie, grid]
-  renewable: [wind, solar, photovoltaik]
 
 output:
   formats: [json, csv]
@@ -645,6 +670,8 @@ def test_ckan_search():
 - ✅ HTML scraping
 - ✅ Basic enrichment
 - ✅ JSON/CSV output
+- ✅ Bounded candidate discovery
+- ✅ Runtime URL validation and post-run evidence checking
 
 ### Phase 2
 - [ ] Socrata source
@@ -654,7 +681,7 @@ def test_ckan_search():
 
 ### Phase 3
 - [ ] Machine learning classification
-- [ ] Auto-discovery of data portals
+- [ ] Registry-backed auto-discovery of data portals
 - [ ] Real-time updates
 - [ ] Web dashboard
 

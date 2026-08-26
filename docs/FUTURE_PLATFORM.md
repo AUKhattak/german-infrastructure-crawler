@@ -302,25 +302,25 @@ def discover_plugins():
 ```
 
 **Future Capabilities**:
-- ✅ Auto-discovery of new source types
-- ✅ User-installable plugins
-- ✅ External plugin repository
-- ✅ Version management for plugins
-- ✅ Plugin dependency handling
-- ✅ Community contributions support
+- Automatic discovery of new source types
+- User-installable plugins
+- External plugin repository
+- Version management for plugins
+- Plugin dependency handling
+- Community contributions support
 
 ---
 
 ### 10. **Smart Source Discovery Foundation**
 
-**Current Design**: Manual configuration in YAML
+**Current Design**: YAML seeds plus bounded candidate discovery
 
 **Why This is Beneficial**:
 - Explicit control over which sources to crawl
 - Configuration is human-readable and version-controlled
 - No unexpected sources being added
 
-**Opportunity**:
+**Opportunity**: Expand controlled discovery sources and provenance:
 ```python
 # Can add automatic discovery
 class SourceDiscovery:
@@ -337,17 +337,18 @@ class SourceDiscovery:
 ```
 
 **Future Capabilities**:
-- ✅ Automatic portal discovery via CKAN registries
-- ✅ Periodic source scanning for new portals
-- ✅ Community-driven source lists
-- ✅ Source recommendation based on categories
-- ✅ Geographic source discovery
+- Registry-backed portal discovery
+- Periodic source scanning for new portals
+- Community-driven source lists
+- Source recommendation based on categories
+- Geographic source discovery
 
 ---
 
 ### 11. **Comprehensive Testing Foundation**
 
-**Current Design**: Limited test coverage (but modular structure)
+**Current Design**: Modular automated tests cover crawler components and
+post-run evidence validation
 
 **Why This is Beneficial**:
 - Each component has single responsibility → easy to test
@@ -373,19 +374,17 @@ class TestCKANSource:
 ```
 
 **Future Capabilities**:
-- ✅ Unit tests for all components
-- ✅ Integration tests with real APIs
-- ✅ Performance tests
-- ✅ Regression test suite
-- ✅ CI/CD pipeline integration
-- ✅ Test coverage metrics
-- ✅ Contract testing for external APIs
+- Broader integration tests with representative external API contracts
+- Performance tests
+- CI/CD pipeline integration
+- Coverage thresholds and trend reporting
+- Contract testing for external APIs
 
 ---
 
 ### 12. **Data Quality Framework Foundation**
 
-**Current Design**: Basic field validation
+**Current Design**: Runtime URL validation plus post-run evidence validation
 
 **Why This is Beneficial**:
 - Simple validation is easy to understand
@@ -413,12 +412,12 @@ class DataQualityScorer:
 ```
 
 **Future Capabilities**:
-- ✅ Quality scoring for each dataset
-- ✅ Filtering by quality thresholds
-- ✅ Prioritization of high-quality data
-- ✅ Quality metrics dashboard
-- ✅ Trend analysis of data quality over time
-- ✅ Automated quality improvement suggestions
+- Quality scoring for each dataset
+- Filtering by quality thresholds
+- Prioritization of high-quality data
+- Quality metrics dashboard
+- Trend analysis of data quality over time
+- Automated quality improvement suggestions
 
 ---
 
@@ -480,13 +479,11 @@ Future: Kubernetes-deployed microservices
 
 ### Path 4: From Manual to Autonomous
 ```
-Current: Manual configuration
+Current: Configuration plus bounded candidate discovery
 ↓
 Step 1: Add source health monitoring
 ↓
-Step 2: Add automatic retry logic
-↓
-Step 3: Add self-healing capabilities
+Step 2: Add self-healing capabilities
 ↓
 Future: Autonomous crawling with AI-driven decision making
 ```
@@ -529,7 +526,7 @@ The German Infrastructure Crawler is not limited by what it **can't do**, but ra
 - **No database?** → Opportunity to add powerful querying and analytics
 - **Simple classification?** → Foundation for ML-based intelligence
 - **Basic logging?** → Path to comprehensive monitoring dashboard
-- **Static sources?** → Stepping stone to auto-discovery
+- **Bounded discovery?** → Stepping stone to registry-backed auto-discovery
 - **Batch processing?** → Starting point for real-time data access
 - **Manual scheduling?** → Base for intelligent, auto-scheduled crawling
 
