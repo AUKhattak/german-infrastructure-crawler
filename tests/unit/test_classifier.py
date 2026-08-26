@@ -21,3 +21,16 @@ def test_unknown_dataset_is_uncategorized():
 def test_multiple_categories_are_deterministic():
 	classifier = InfrastructureClassifier()
 	assert classifier.classify("Solarstrom", "Breitband", []) == ["power", "renewable", "telecom"]
+
+
+def test_custom_category_configuration_is_used(tmp_path):
+	config_path = tmp_path / "categories.yaml"
+	config_path.write_text("custom: [specialkeyword]\n", encoding="utf-8")
+
+	classifier = InfrastructureClassifier(str(config_path))
+
+	assert classifier.classify("SpecialKeyword dataset", "", []) == ["custom"]
+
+
+def test_missing_match_falls_back_to_uncategorized():
+	assert InfrastructureClassifier().classify("Books", "Literature", []) == ["uncategorized"]

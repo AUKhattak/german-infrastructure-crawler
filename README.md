@@ -30,18 +30,65 @@ This uses all active seed sources and configured search queries. In the current 
 
 Results are written to the `output` directory as timestamped JSON and CSV files.
 
-## Faster Run
+## Bounded Live Run
 
-For a quick local run with a small scope and no URL validation:
+For a bounded live run that searches several categories and validates source and
+resource URLs, use:
+
+```powershell
+python scripts\run.py --max-sources 8 --max-datasets 20 --query energy infrastructure telecom renewable power
+```
+
+This run is intentionally larger than the quick example and normally takes at
+least a couple of minutes because it uses multiple sources, applies the
+configured rate limit, and performs live validation. Runtime depends on source
+availability and network response times.
+
+For a quick local run without live URL validation, add `--offline` and reduce
+the scope:
 
 ```powershell
 python scripts\run.py --max-sources 2 --max-datasets 5 --query energy --offline
 ```
 
-The `--offline` option makes this run faster, but it skips live URL validation. For a small live run that still validates URLs, omit `--offline`:
+## Validate Results
+
+After an online crawl, the generated files are written to `output`. The JSON
+file is the authoritative structured result. The regular CSV contains all
+records, including records whose validation failed.
+
+Run the post-crawl evidence checker against the generated JSON:
 
 ```powershell
-python scripts\run.py --max-sources 2 --max-datasets 5 --query energy
+python scripts\validate_output.py output\infrastructure_data_YYYYMMDD_HHMMSS.json `
+	--report output\validation_report.json `
+	--validated-csv output\validated_sources_YYYYMMDD_HHMMSS.csv
+```
+
+Replace `YYYYMMDD_HHMMSS` with the timestamp in the generated filename. The
+checker does not make network requests. It verifies record counts, duplicate
+source URLs, validation evidence, categories, metadata quality, and whether at
+least 20 unique records have accessible status plus HTTP status and validation
+timestamp evidence.
+
+Exit codes are suitable for scripts and CI:
+
+- `0`: at least 20 validated unique records
+- `1`: fewer than 20 validated unique records
+- `2`: invalid input or command usage error
+
+The validation command creates:
+
+- `output\validation_report.json`: machine-readable counts and evidence issues
+- `output\validated_sources_*.csv`: only unique records with complete accessible
+	validation evidence
+
+The validated CSV preserves titles, descriptions, categories, source URLs, API
+URLs, resources, licences, access status, and validation metadata. To inspect a
+CSV directly, the validator also accepts the regular crawl CSV:
+
+```powershell
+python scripts\validate_output.py output\infrastructure_data_YYYYMMDD_HHMMSS.csv
 ```
 
 ## Discover Sources Separately

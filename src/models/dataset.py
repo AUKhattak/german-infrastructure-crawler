@@ -24,6 +24,7 @@ class Dataset:
     # Optional fields - with defaults - MUST COME AFTER required fields
     organization_id: str = ''
     url: str = ''
+    api_url: str = ''
     license: str = 'Unknown'
     created_at: str = ''
     updated_at: str = ''
@@ -33,6 +34,8 @@ class Dataset:
     geographic_coverage: str = 'Unknown'
     access_status: str = 'unknown'
     source_url_status: str = 'not_checked'
+    source_url_validation: Dict = field(default_factory=dict)
+    validation_timestamp: str = ''
     resource_validation: List[Dict] = field(default_factory=list)
     matched_keywords: List[str] = field(default_factory=list)
     
@@ -57,14 +60,18 @@ class Dataset:
             'source_name': self.source,
             'source_type': self.source_type,
             'source_url': self.url,
+            'api_url': self.api_url,
             'download_urls': [r.get('url', '') for r in self.resources if r.get('url')][:5],
+            'resources': self.resources,
             'data_formats': self.formats,
             'geographic_coverage': self.geographic_coverage,
             'license': self.license,
             'last_updated': self.updated_at or self.created_at,
             'access_status': self.access_status,
             'source_url_status': self.source_url_status,
+            'source_url_validation': self.source_url_validation,
             'resource_validation': self.resource_validation,
+            'validation_timestamp': self.validation_timestamp,
             'infrastructure_categories': self.infrastructure_categories,
             'matched_keywords': self.matched_keywords,
             'tags': self.tags[:10],
@@ -89,6 +96,7 @@ class Dataset:
             source=data.get('source_name', data.get('source', 'Unknown')),
             source_type=data.get('source_type', 'unknown'),
             url=data.get('source_url', data.get('url', '')),
+            api_url=data.get('api_url', ''),
             resources=data.get('resources', []),
             tags=data.get('tags', []),
             license=data.get('license', 'Unknown'),
@@ -101,7 +109,9 @@ class Dataset:
             geographic_coverage=data.get('geographic_coverage', 'Unknown'),
             access_status=data.get('access_status', 'unknown'),
             source_url_status=data.get('source_url_status', 'not_checked'),
+            source_url_validation=data.get('source_url_validation', {}),
             resource_validation=data.get('resource_validation', []),
+            validation_timestamp=data.get('validation_timestamp', ''),
             infrastructure_categories=data.get('infrastructure_categories', []),
             matched_keywords=data.get('matched_keywords', []),
             raw_data=data.get('raw_data', {})

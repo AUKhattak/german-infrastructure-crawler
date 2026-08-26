@@ -26,7 +26,8 @@ class HttpClient:
         self,
         rate_limit: float = 1.0,
         max_retries: int = 3,
-        timeout: int = 30
+        timeout: int = 30,
+        backoff_factor: float = 1
     ):
         self.rate_limit = rate_limit
         self.max_retries = max_retries
@@ -39,7 +40,7 @@ class HttpClient:
         # Retry strategy
         retry_strategy = Retry(
             total=max_retries,
-            backoff_factor=1,
+            backoff_factor=backoff_factor,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["GET"]
         )
@@ -68,12 +69,9 @@ class HttpClient:
         self._wait_for_rate_limit()
         
         try:
-            response = self.session.get(
-                url,
-                params=params,
-                timeout=kwargs.get('timeout', self.timeout),
-                **kwargs
-            )
+            request_kwargs = dict(kwargs)
+            request_kwargs.setdefault('timeout', self.timeout)
+            response = self.session.get(url, params=params, **request_kwargs)
             
             # Log slow requests
             if response.elapsed.total_seconds() > 5:
@@ -94,4 +92,6 @@ class HttpClient:
     def post(self, url: str, data: Optional[Dict] = None, **kwargs) -> requests.Response:
         """POST request with rate limiting"""
         self._wait_for_rate_limit()
-        return self.session.post(url, data=data, timeout=kwargs.get('timeout', self.timeout), **kwargs)
+        request_kwargs = dict(kwargs)
+        request_kwargs.setdefault('timeout', self.timeout)
+        return self.session.post(url, data=data, **request_kwargs)

@@ -30,6 +30,7 @@ class SourceRegistry:
         """Initialize all sources from configuration"""
         
         sources = load_seed_sources(self.config)
+        runtime_settings = self.config.get('runtime_settings', {})
         for source_config in sources:
             source_id = source_config.get('id') or source_config.get('name')
             if not source_config.get('active', True):
@@ -37,6 +38,8 @@ class SourceRegistry:
                 continue
             
             try:
+                source_config = dict(source_config)
+                source_config['runtime_settings'] = runtime_settings
                 crawler = SourceFactory.create(source_config)
                 self.sources[source_id] = crawler
                 self.source_status[source_id] = {
@@ -79,9 +82,13 @@ class SourceRegistry:
         
         return results
     
-    def get_working_sources(self) -> List[Dict]:
-        """Get only working sources"""
-        self.validate_all()
+    def get_working_sources(self, validate: bool = True) -> List[Dict]:
+        """Get working sources, optionally without live validation."""
+        if validate:
+            self.validate_all()
+        else:
+            for source_id in self.sources:
+                self.source_status[source_id]['status'] = 'valid'
         working = []
         
         for source_id, status in self.source_status.items():

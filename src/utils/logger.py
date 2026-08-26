@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-def setup_logging(level: str = "INFO", log_file: str = "logs/crawler.log"):
+def setup_logging(level: str = "INFO", log_file: str = "logs/crawler.log", format_string: str = None):
     """Setup logging configuration"""
     
     # Create logs directory
@@ -26,7 +26,7 @@ def setup_logging(level: str = "INFO", log_file: str = "logs/crawler.log"):
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_format = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
+        format_string or '%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     console_handler.setFormatter(console_format)
@@ -35,9 +35,7 @@ def setup_logging(level: str = "INFO", log_file: str = "logs/crawler.log"):
     # File handler
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    file_format = logging.Formatter(format_string or '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(file_format)
     logger.addHandler(file_handler)
     

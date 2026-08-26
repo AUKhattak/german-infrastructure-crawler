@@ -11,6 +11,7 @@ from src.models.dataset import Dataset
 from src.utils.http_client import HttpClient
 from src.utils.robots import RobotsChecker
 from src.utils.validators import normalize_url
+from src.processors.classifier import InfrastructureClassifier
 import logging
 import re
 
@@ -27,9 +28,12 @@ class HTMLSource(BaseCrawler):
         super().__init__(config)
         self.http = HttpClient(
             rate_limit=self.rate_limit,
-            max_retries=self.max_retries
+            max_retries=self.max_retries,
+            timeout=self.timeout,
+            backoff_factor=self.backoff_factor
         )
         self.robots = RobotsChecker()
+        self.classifier = InfrastructureClassifier(self.category_config_path)
         
         # HTML parser configuration
         self.parser_config = config.get('parser', {})
@@ -48,8 +52,8 @@ class HTMLSource(BaseCrawler):
     def get_capabilities(self) -> Dict:
         return {
             'supports_geolocation': False,
-            'supports_license': False,
-            'supports_formats': False,
+            'supports_license': True,
+            'supports_formats': True,
             'supports_tags': False,
             'supports_pagination': False,
             'max_limit': 50,
@@ -128,9 +132,35 @@ class HTMLSource(BaseCrawler):
             if href and not href.startswith('http'):
                 href = normalize_url(href, self.base_url)
             
-            # Get description
-            desc_elem = element.find(['p', '.description', '.notes'])
+            # Get description and optional licence metadata
+            desc_elem = element.select_one(','.join(self.selectors.get(
+                'description', ['p', '.description', '.notes']
+            )))
             description = desc_elem.text.strip() if desc_elem else ''
+            license_elem = element.select_one(','.join(self.selectors.get(
+                'license', ['.license', '.licence', '[rel="license"]']
+            )))
+            if license_elem:
+                license_href = license_elem.get('href')
+                license_value = (normalize_url(license_href, self.base_url)
+                                 if license_href else license_elem.get_text(' ', strip=True))
+            else:
+                license_value = 'Unknown'
+            resources = []
+            resource_selectors = self.selectors.get('resources', [])
+            resource_elements = element.select(','.join(resource_selectors)) if resource_selectors else []
+            for resource_elem in resource_elements:
+                resource_url = normalize_url(resource_elem.get('href'), self.base_url)
+                if resource_url:
+                    resources.append({
+                        'name': resource_elem.get_text(' ', strip=True),
+                        'format': resource_elem.get('data-format', 'Unknown'),
+                        'url': resource_url,
+                        'description': '',
+                    })
+            categories, matched_keywords = self.classifier.classify_with_matches(
+                title, description, []
+            )
             
             # Create dataset
             return Dataset(
@@ -141,15 +171,17 @@ class HTMLSource(BaseCrawler):
                 source=self.name,
                 source_type='html',
                 url=href,
-                resources=[],
+                resources=resources,
                 tags=[],
-                license='Unknown',
+                license=license_value.strip() if license_value.strip() else 'Unknown',
                 created_at='',
                 updated_at='',
                 is_open=False,
-                formats=['HTML'],
+                formats=list(dict.fromkeys([resource['format'] for resource in resources
+                                            if resource['format'] != 'Unknown'] or ['HTML'])),
                 geographic_coverage='Unknown',
-                infrastructure_categories=['uncategorized'],
+                infrastructure_categories=categories,
+                matched_keywords=matched_keywords,
                 raw_data={}
             )
             

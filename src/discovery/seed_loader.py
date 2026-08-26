@@ -16,6 +16,13 @@ def load_config(config_path: str = None) -> Dict:
         return yaml.safe_load(handle) or {}
 
 
+def load_settings(settings_path: str = None) -> Dict:
+    """Load global runtime settings from YAML."""
+    path = Path(settings_path) if settings_path else PROJECT_ROOT / "config" / "settings.yaml"
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
 def load_seed_sources(config: Dict) -> List[Dict]:
     """Return seed portals, supporting the legacy ``sources`` mapping."""
     seeds = config.get("seed_sources")

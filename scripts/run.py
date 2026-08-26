@@ -14,13 +14,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.core.registry import SourceRegistry
 from src.utils.logger import setup_logging
 from src.discovery.catalogue_detector import CatalogueDetector
-from src.discovery.seed_loader import load_config, load_seed_sources
+from src.discovery.candidate_discoverer import CandidateDiscoverer
+from src.discovery.seed_loader import load_config, load_settings, load_seed_sources
 from src.processors.deduplicator import deduplicate
+from src.processors.formatter import write_csv
 from src.utils.http_client import HttpClient
-from src.utils.validators import validate_url
+from src.utils.validators import derive_access_status, validate_url
 import logging
 import yaml
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -36,6 +38,8 @@ def main():
                        help='Datasets per source')
     parser.add_argument('-c', '--config', default=str(PROJECT_ROOT / 'config' / 'sources.yaml'),
                        help='Configuration file')
+    parser.add_argument('--settings', default=str(PROJECT_ROOT / 'config' / 'settings.yaml'),
+                       help='Runtime settings file')
     parser.add_argument('-o', '--output', default=str(PROJECT_ROOT / 'output'),
                        help='Output directory')
     parser.add_argument('--max-sources', type=int, default=None,
@@ -47,9 +51,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Setup logging
-    setup_logging()
-    
     print("\n" + "=" * 70)
     print("🏗️ GERMAN INFRASTRUCTURE DATA CRAWLER")
     print("   Enterprise Edition")
@@ -57,13 +58,39 @@ def main():
     
     # Load config
     config = load_config(args.config)
+    settings = load_settings(args.settings)
+    config['runtime_settings'] = settings
+    logging_config = settings.get('logging', {})
+    setup_logging(
+        level=logging_config.get('level', 'INFO'),
+        log_file=str(PROJECT_ROOT / logging_config.get('file', 'logs/crawler.log')),
+        format_string=logging_config.get('format'),
+    )
     queries = args.query or config.get('discovery', {}).get('queries') or config.get('default_queries', ['energy'])
+    max_queries = settings.get('crawler', {}).get('max_queries_per_source')
+    if max_queries:
+        queries = queries[:max_queries]
     discovery_config = config.get('discovery', {})
     max_sources = args.max_sources or discovery_config.get('max_sources', 20)
-    max_datasets = args.max_datasets or discovery_config.get('max_datasets_per_source', args.limit)
+    crawler_settings = settings.get('crawler', {})
+    max_datasets = args.max_datasets or discovery_config.get(
+        'max_datasets_per_source', crawler_settings.get('max_datasets_per_source', args.limit)
+    )
 
     seeds = load_seed_sources(config)[:max_sources]
     if not args.offline:
+        discovery_settings = settings.get('discovery', {})
+        if discovery_settings.get('enabled', False):
+            discovery_http = HttpClient(**settings.get('http', {}))
+            candidates = CandidateDiscoverer(http=discovery_http).discover(
+                seeds,
+                max_sources=max_sources,
+                max_depth=discovery_settings.get('max_depth', 1),
+                max_pages_per_source=discovery_settings.get('max_pages_per_source', 20),
+                allowed_domains=discovery_settings.get('allowed_domains', []),
+                respect_robots=discovery_settings.get('respect_robots_txt', True),
+            )
+            seeds = (seeds + candidates)[:max_sources]
         detector = CatalogueDetector()
         detected_seeds = []
         for seed in seeds:
@@ -80,7 +107,7 @@ def main():
     registry = SourceRegistry(config)
     
     # Get working sources
-    working_sources = registry.get_working_sources()
+    working_sources = registry.get_working_sources(validate=not args.offline)
     print(f"Found {len(working_sources)} working sources")
     
     if not working_sources:
@@ -109,24 +136,28 @@ def main():
             datasets = crawler.batch_search(queries, min(args.limit, max_datasets))[:max_datasets]
 
             if not args.offline:
+                http_settings = settings.get('http', {})
                 validation_http = HttpClient(
                     rate_limit=crawler.rate_limit,
                     max_retries=crawler.max_retries,
+                    timeout=http_settings.get('timeout', crawler.timeout),
+                    backoff_factor=http_settings.get('backoff_factor', crawler.backoff_factor),
                 )
                 for dataset in datasets:
                     source_result = validate_url(dataset.url, validation_http)
                     dataset.source_url_status = source_result['status']
+                    dataset.source_url_validation = source_result
                     resource_results = []
                     for resource in dataset.resources:
                         resource_result = validate_url(resource.get('url'), validation_http)
+                        resource_result.update({
+                            'name': resource.get('name', ''),
+                            'format': resource.get('format', 'Unknown'),
+                        })
                         resource_results.append(resource_result)
                     dataset.resource_validation = resource_results
-                    if dataset.source_url_status == 'accessible':
-                        dataset.access_status = 'accessible'
-                    elif any(result['status'] == 'accessible' for result in resource_results):
-                        dataset.access_status = 'accessible'
-                    else:
-                        dataset.access_status = 'inaccessible'
+                    dataset.access_status = derive_access_status(source_result, resource_results)
+                    dataset.validation_timestamp = datetime.now(timezone.utc).isoformat()
             
             if datasets:
                 stats['sources_successful'] += 1
@@ -140,7 +171,25 @@ def main():
             print(f"   Error: {e}")
             logger.error(f"Error crawling {crawler.name}: {e}")
     
-    unique_datasets = deduplicate(all_datasets)
+    if settings.get('crawler', {}).get('deduplicate', True):
+        unique_datasets = deduplicate(all_datasets)
+    else:
+        unique_datasets = all_datasets
+
+    validation_settings = settings.get('validation', {})
+    filtered_datasets = []
+    for dataset in unique_datasets:
+        if validation_settings.get('require_url', True) and not dataset.url:
+            logger.warning(f"Skipping dataset without source URL: {dataset.title}")
+            continue
+        if validation_settings.get('require_title', True) and not dataset.title.strip():
+            logger.warning("Skipping dataset without title")
+            continue
+        if len(dataset.description.strip()) < validation_settings.get('min_description_length', 0):
+            logger.warning(f"Skipping dataset with short description: {dataset.title}")
+            continue
+        filtered_datasets.append(dataset)
+    unique_datasets = filtered_datasets
     
     print(f"\n✅ Total unique datasets: {len(unique_datasets)}")
     
@@ -151,38 +200,27 @@ def main():
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        output_formats = set(settings.get('output', {}).get('formats', ['json', 'csv']))
+
         # JSON output
         import json
-        json_file = output_path / f"infrastructure_data_{timestamp}.json"
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                'metadata': {
-                    'crawled_at': datetime.now().isoformat(),
-                    'total_datasets': len(unique_datasets),
-                    'sources_attempted': stats['sources_attempted'],
-                    'sources_successful': stats['sources_successful']
-                },
-                'datasets': [ds.to_dict() for ds in unique_datasets]
-            }, f, indent=2, ensure_ascii=False)
+        if 'json' in output_formats:
+            json_file = output_path / f"infrastructure_data_{timestamp}.json"
+            with open(json_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'metadata': {
+                        'crawled_at': datetime.now().isoformat(),
+                        'total_datasets': len(unique_datasets),
+                        'sources_attempted': stats['sources_attempted'],
+                        'sources_successful': stats['sources_successful']
+                    },
+                    'datasets': [ds.to_dict() for ds in unique_datasets]
+                }, f, indent=2, ensure_ascii=False)
         
         # CSV output
-        import csv
-        csv_file = output_path / f"infrastructure_data_{timestamp}.csv"
-        fieldnames = ['dataset_id', 'dataset_title', 'organization', 'source_name', 'data_formats', 
-                     'geographic_coverage', 'license', 'last_updated', 
-                 'infrastructure_categories', 'source_url', 'download_urls',
-                 'access_status', 'source_url_status', 'matched_keywords']
-        
-        with open(csv_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for ds in unique_datasets:
-                row = ds.to_dict()
-                row['data_formats'] = '; '.join(row.get('data_formats', []))
-                row['infrastructure_categories'] = '; '.join(row.get('infrastructure_categories', []))
-                row['download_urls'] = '; '.join(row.get('download_urls', []))
-                row['matched_keywords'] = '; '.join(row.get('matched_keywords', []))
-                writer.writerow(row)
+        if 'csv' in output_formats:
+            csv_file = output_path / f"infrastructure_data_{timestamp}.csv"
+            write_csv(unique_datasets, csv_file)
         
         print(f"💾 Results saved to {args.output}/")
         

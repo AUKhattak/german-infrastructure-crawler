@@ -12,17 +12,27 @@ def test_ckan_transform_extracts_metadata():
 	assert dataset.organization == "Public Org"
 	assert dataset.formats == ["CSV"]
 	assert dataset.url == "https://example.test/dataset/1"
+	assert dataset.api_url == "https://example.test/api/action/package_search"
+	assert dataset.infrastructure_categories == ["renewable"]
 
 
 def test_ckan_transform_handles_missing_metadata():
 	dataset = CKANSource({"name": "Test", "base_url": "https://example.test", "type": "ckan"})._transform({})
 	assert dataset.title == "No title"
 	assert dataset.url is None
+	assert dataset.infrastructure_categories == ["uncategorized"]
 
 
 def test_ckan_endpoint_is_joined_safely():
 	source = CKANSource({"name": "Test", "base_url": "https://example.test/", "api_path": "/api/search"})
 	assert source.search_endpoint == "https://example.test/api/search"
+
+
+def test_ckan_license_fallbacks():
+	source = CKANSource({"name": "Test", "base_url": "https://example.test", "type": "ckan"})
+	assert source._transform({"license_id": "cc-by"}).license == "cc-by"
+	assert source._transform({"extras": [{"key": "license", "value": "Open Licence"}]}).license == "Open Licence"
+	assert source._transform({}).license == "Unknown"
 
 
 def test_ckan_response_parser_returns_dataset_list(monkeypatch):

@@ -27,10 +27,18 @@ class BaseCrawler(ABC):
     
     def __init__(self, config: Dict):
         self.config = config
+        settings = config.get('runtime_settings', {})
+        http_settings = settings.get('http', {})
+        category_settings = settings.get('categories', {})
         self.name = config.get('name')
         self.base_url = config.get('base_url')
-        self.rate_limit = config.get('rate_limit', 1.0)
-        self.max_retries = config.get('max_retries', 3)
+        self.category_config_path = config.get(
+            'category_config_path', category_settings.get('config_path')
+        )
+        self.rate_limit = config.get('rate_limit', http_settings.get('rate_limit', 1.0))
+        self.max_retries = config.get('max_retries', http_settings.get('max_retries', 3))
+        self.timeout = config.get('timeout', http_settings.get('timeout', 30))
+        self.backoff_factor = config.get('backoff_factor', http_settings.get('backoff_factor', 1))
         self._setup()
     
     def _setup(self):

@@ -26,9 +26,11 @@ class CKANSource(BaseCrawler):
         super().__init__(config)
         self.http = HttpClient(
             rate_limit=self.rate_limit,
-            max_retries=self.max_retries
+            max_retries=self.max_retries,
+            timeout=self.timeout,
+            backoff_factor=self.backoff_factor
         )
-        self.classifier = InfrastructureClassifier()
+        self.classifier = InfrastructureClassifier(self.category_config_path)
         self.geocoder = GeographicExtractor()
         
         # API endpoint - can be overridden in config
@@ -133,16 +135,17 @@ class CKANSource(BaseCrawler):
             source=self.name,
             source_type='ckan',
             url=dataset_url,
+            api_url=self.search_endpoint,
             resources=resources,
             tags=tags,
-            license=raw.get('license_title', 'Unknown'),
+            license=self._extract_license(raw),
             created_at=raw.get('metadata_created', ''),
             updated_at=raw.get('metadata_modified', ''),
             is_open=raw.get('isopen', False),
             views=raw.get('num_views', 0),
             downloads=raw.get('num_downloads', 0),
             # Processed fields
-            formats=list(set(r['format'] for r in resources if r['format'] != 'Unknown')),
+            formats=list(dict.fromkeys(r['format'] for r in resources if r['format'] != 'Unknown')),
             geographic_coverage=self.geocoder.extract(raw),
             infrastructure_categories=categories,
             matched_keywords=matched_keywords,
@@ -150,3 +153,17 @@ class CKANSource(BaseCrawler):
         )
         
         return dataset
+
+    @staticmethod
+    def _extract_license(raw: Dict) -> str:
+        """Return the first explicit CKAN licence value, otherwise Unknown."""
+        for key in ('license_title', 'license_id', 'license_url'):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for extra in raw.get('extras', []) or []:
+            key = str(extra.get('key', '')).lower()
+            value = extra.get('value')
+            if 'licen' in key and isinstance(value, str) and value.strip():
+                return value.strip()
+        return 'Unknown'

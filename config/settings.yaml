@@ -10,6 +10,16 @@ crawler:
   max_datasets_per_source: 100
   max_queries_per_source: 5
   deduplicate: true
+
+categories:
+  config_path: config/categories.yaml
+
+discovery:
+  enabled: true
+  max_depth: 1
+  max_pages_per_source: 20
+  allowed_domains: []
+  respect_robots_txt: true
   
 logging:
   level: INFO
