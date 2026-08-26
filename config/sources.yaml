@@ -1,0 +1,130 @@
+# config/sources.yaml
+# All data source configurations
+
+seed_sources:
+  - id: govdata
+    name: GovData
+    base_url: https://www.govdata.de
+    type: ckan
+    api_path: /ckan/api/action/package_search
+    organization: German Federal Government
+    description: Central German open data portal
+    active: true
+    rate_limit: 1.0
+    max_retries: 3
+    priority: 1
+
+  - id: berlin
+    name: Berlin Open Data
+    base_url: https://daten.berlin.de
+    type: auto
+    organization: State of Berlin
+    active: true
+    rate_limit: 1.0
+    max_retries: 3
+
+  - id: hamburg
+    name: Hamburg Open Data
+    base_url: https://daten-hamburg.de
+    type: auto
+    organization: Free and Hanseatic City of Hamburg
+    active: true
+    rate_limit: 1.0
+
+  - id: munich
+    name: Munich Open Data
+    base_url: https://opendata.muenchen.de
+    type: auto
+    organization: City of Munich
+    active: true
+    rate_limit: 1.0
+
+  - id: nrw
+    name: Open.NRW
+    base_url: https://open.nrw
+    type: auto
+    organization: State of North Rhine-Westphalia
+    active: true
+    rate_limit: 1.0
+
+  - id: service_bw
+    name: Baden-Württemberg Open Data
+    base_url: https://www.opendata.service-bw.de
+    type: auto
+    organization: State of Baden-Württemberg
+    active: true
+    rate_limit: 1.0
+    max_retries: 3
+
+  - id: schleswig_holstein
+    name: Schleswig-Holstein Open Data
+    base_url: https://opendata.schleswig-holstein.de
+    type: auto
+    organization: State of Schleswig-Holstein
+    active: true
+
+  - id: sachsen
+    name: Saxony Open Data
+    base_url: https://opendata.sachsen.de
+    type: auto
+    organization: State of Saxony
+    active: true
+
+sources:
+  govdata:
+    name: GovData
+    base_url: https://www.govdata.de
+    type: ckan
+    api_path: /ckan/api/action/package_search
+    organization: German Federal Government
+    active: true
+    rate_limit: 1.0
+    max_retries: 3
+
+default_queries:
+  - energy
+  - infrastructure
+  - telecom
+  - renewable
+  - power
+  - wind
+  - solar
+  - transport
+  - school
+  - hospital
+  - strom
+  - energie
+  - kraftwerk
+  - stromnetz
+  - windenergie
+  - photovoltaik
+  - breitband
+  - glasfaser
+  - internet
+  - telekommunikation
+  - grundstück
+  - flurstück
+  - gemeinde
+  - kommune
+  - schule
+  - krankenhaus
+  - feuerwehr
+
+discovery:
+  max_depth: 1
+  max_sources: 20
+  max_datasets_per_source: 100
+  max_pages_per_source: 20
+  respect_robots_txt: true
+
+categories:
+  power: [strom, electricity, energie, kraftwerk, netz, grid, spannung, leistung]
+  renewable: [wind, solar, photovoltaik, wasser, biogas, geothermie, erneuerbar]
+  land: [grundstück, fläche, kataster, parcel, land, gemeinde, stadt, bezirk]
+  telecom: [telekommunikation, internet, breitband, 5g, fiber, kabel, netzwerk]
+  public_facility: [schule, krankenhaus, kindergarten, feuerwehr, polizei, rathaus, bibliothek]
+
+output:
+  formats: [json, csv]
+  compression: false
+  max_file_size_mb: 100

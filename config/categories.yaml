@@ -1,0 +1,43 @@
+power:
+  - strom
+  - electricity
+  - energie
+  - kraftwerk
+  - netz
+  - grid
+  - spannung
+  - leistung
+renewable:
+  - wind
+  - solar
+  - photovoltaik
+  - wasser
+  - biogas
+  - geothermie
+  - erneuerbar
+land:
+  - grundstück
+  - fläche
+  - kataster
+  - parcel
+  - land
+  - gemeinde
+  - stadt
+  - bezirk
+telecom:
+  - telekommunikation
+  - internet
+  - breitband
+  - 5g
+  - fiber
+  - glasfaser
+  - kabel
+  - netzwerk
+public_facility:
+  - schule
+  - krankenhaus
+  - kindergarten
+  - feuerwehr
+  - polizei
+  - rathaus
+  - bibliothek

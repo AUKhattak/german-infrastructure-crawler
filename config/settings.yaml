@@ -1,0 +1,22 @@
+# Global settings
+
+http:
+  timeout: 30
+  max_retries: 3
+  backoff_factor: 1
+  rate_limit: 1.0
+  
+crawler:
+  max_datasets_per_source: 100
+  max_queries_per_source: 5
+  deduplicate: true
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/crawler.log
+  
+validation:
+  require_url: true
+  require_title: true
+  min_description_length: 10
